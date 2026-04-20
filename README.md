@@ -2,10 +2,7 @@
 
 A lightweight Claude Code statusline dashboard with a rounded multi-line layout — shows current dir, git, model, cost, quotas, MCP health, and more.
 
-```
-╭╴ ~/dotfile · repo/main! · Opus 4.7 mx · $0.0042 · 12min
-╰╴ ▰▰▰▱▱ 5h  ▰▱▱▱▱ 7d · ↑1.2K 3t/s · +12 -3 · ✓4 ◆1 · sammylin
-```
+![Statusline preview](images/demo.png)
 
 ## Features
 
