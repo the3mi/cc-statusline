@@ -2,81 +2,113 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-
-import { getTheme, POWERLINE, R, DIM, BOLD, seg, segDim, segBold } from './lib/colors.js';
+import { getTheme, seg, segDim, segBold, POWERLINE, R, DIM, BOLD } from './lib/colors.js';
 import { bar, fmtDur, fmtTok } from './lib/format.js';
 import { getGitInfo } from './lib/git.js';
-import { readCompacts, readSubagents, readMcpStatus, readEditedFiles } from './lib/hooks.js';
+import { getHookData } from './lib/hooks.js';
 import { getRateLimits } from './lib/rate-limits.js';
 import { updateSession } from './lib/session.js';
 
-// ─── Config ────────────────────────────────────────────────────────────
-const POWERLINE_FONTS = true;
-const THEME = 'catppuccin';
+// ─── Config ────────────────────────────────────────────────────────────────
+const THEME = getTheme('catppuccin');
+const USE_POWERLINE = true;
+const PL  = USE_POWERLINE ? POWERLINE : '│';
+const PLR = USE_POWERLINE ? '\uE0B2' : '│';
 
+// ─── Read stdin ─────────────────────────────────────────────────────────────
 let d = '';
 process.stdin.on('data', c => d += c);
 process.stdin.on('end', () => {
   try {
     const i = JSON.parse(d);
-    const C = getTheme(THEME);
-    const pl = POWERLINE_FONTS ? POWERLINE : '|';
+    const C = THEME;
 
-    // ── Account email ──────────────────────────────────────────────────
-    let accountEmail = '';
+    // ── Account ─────────────────────────────────────────────────────────
+    let account = '';
     try {
-      const cj = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-      if (cj?.account?.email) accountEmail = cj.account.email.replace(/@.*/, '');
-    } catch (e) {}
+      const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
+      if (claudeJson?.account?.email) {
+        account = claudeJson.account.email.replace(/@.*/, '');
+      }
+    } catch (_) {}
 
-    // ── Gather data ────────────────────────────────────────────────────
+    // ── Session data ─────────────────────────────────────────────────────
     const model = (i.model?.display_name || '?').replace('Claude ', '');
+    const effortMap = { low: 'lo', medium: 'md', high: 'hi', xhigh: 'xh', max: 'mx' };
+    const effort = effortMap[i.effort] || '?';
     const cum = updateSession(i);
+    const dur = Math.round((cum.dur?.total || 0) / 60000);
+
+    // ── Git ──────────────────────────────────────────────────────────────
+    const git = getGitInfo(i);
+
+    // ── Hook data ───────────────────────────────────────────────────────
+    const hook = getHookData();
+
+    // ── Rate limits ──────────────────────────────────────────────────────
     const { r5h, r7d } = getRateLimits(i);
-    const { branch, dirty, repoName } = getGitInfo();
-    const shortDir = (i.cwd || i.workspace?.current_dir || '').split(/[/\\]/).slice(-2).join('/');
 
-    const compactCount = readCompacts();
-    const subagents = readSubagents();
-    const { healthy: mcpHealthy, failed: mcpFailed, auth: mcpAuth } = readMcpStatus();
-    const editedFiles = readEditedFiles();
+    // ── Build segments ────────────────────────────────────────────────────
+    // Group 1: Core — cost (bold), model (bold), effort, duration
+    const core = [
+      segBold(`$${(cum.cost?.total || 0).toFixed(4)}`, C.c),
+      segBold(model, C.m),
+      segDim(`(${effort})`),
+      segDim(fmtDur(dur)),
+    ].join(' ');
 
-    // ── Effort ─────────────────────────────────────────────────────────
-    const effortLabel = { low: 'lo', medium: 'md', high: 'hi', xhigh: 'xh', max: 'mx' };
-    const effort = effortLabel[i.effort] || '?';
+    // Group 2: Lines changed
+    const lines = [];
+    if ((cum.add?.total || 0) > 0) lines.push(seg(`+${cum.add.total}`, C.ok));
+    if ((cum.rm?.total || 0) > 0) lines.push(seg(`-${cum.rm.total}`, C.hi));
+    const linesStr = lines.length ? lines.join(segDim(' ')) : segDim('±0');
 
-    // ── Color helpers ──────────────────────────────────────────────────
-    const cc = pct => pct >= 80 ? C.hi : pct >= 50 ? C.i : C.ok;
+    // Group 3: Tokens + speed
+    const tokTotal = cum.tok?.total || 0;
+    const tokStr = seg(fmtTok(tokTotal), C.bar);
+    const speedStr = cum._speed
+      ? seg(`${cum._speed}t/s`, C.bar)
+      : segDim('0t/s');
 
-    // ── Build output ───────────────────────────────────────────────────
-    const parts = [];
+    // Group 4: Quota bars (5h / 7d)
+    const quota = [];
+    if (r5h > 0) {
+      const col = r5h >= 80 ? C.hi : r5h >= 50 ? C.i : C.ok;
+      quota.push(seg(bar(r5h, 6), col) + segDim('5h'));
+    }
+    if (r7d > 0) {
+      const col = r7d >= 80 ? C.hi : r7d >= 50 ? C.i : C.ok;
+      quota.push(seg(bar(r7d, 6), col) + segDim('7d'));
+    }
+    const quotaStr = quota.join(segDim(' '));
 
-    if (accountEmail) parts.push(segDim(`(${accountEmail})`));
-    if (repoName) parts.push(seg(repoName, C.b));
-    if (branch) parts.push(seg(branch, dirty ? C.hi : C.b) + (dirty ? seg('!', C.hi) : ''));
-    if (shortDir) parts.push(segDim(shortDir));
+    // Group 5: Git repo + branch
+    const gitStr = git.repo
+      ? seg(git.repo, C.b) + ' ' + seg(git.branch, git.dirty ? C.hi : C.b) + (git.dirty ? seg('!', C.hi) : '')
+      : segDim('no git');
 
-    parts.push(segBold(model, C.m) + segDim(`(${effort})`));
-    parts.push(seg(`$${cum.cost.total.toFixed(4)}`, C.c) + segDim(fmtDur(Math.round(cum.dur.total / 60000))));
+    // Group 6: System (MCP, compact, subagent, edited files)
+    const sys = [];
+    if (hook.mcpFailed > 0) sys.push(seg(`✘${hook.mcpFailed}`, C.err));
+    else if (hook.mcpHealthy > 0) sys.push(seg(`✔${hook.mcpHealthy}`, C.ok));
+    if (hook.mcpAuth > 0) sys.push(seg(`△${hook.mcpAuth}`, C.i));
+    if (hook.compact > 0) sys.push(segDim(`⌂${hook.compact}`));
+    if (hook.subagent > 0) sys.push(seg(`${hook.subagent}◆`, C.ed));
+    if (hook.edited.length > 0) sys.push(seg(hook.edited[0].split('/').pop(), C.ed));
 
-    if (cum.add.total > 0) parts.push(seg(`+${cum.add.total}`, C.ok));
-    if (cum.rm.total > 0) parts.push(seg(`-${cum.rm.total}`, C.hi));
-    if (cum._speed && parseFloat(cum._speed) > 0) parts.push(seg(`${cum._speed}t/s`, C.bar));
-    parts.push(seg(fmtTok(cum.tok.total), C.bar));
+    // ── Compose ─────────────────────────────────────────────────────────
+    const grp = (parts, sep = ' ') => parts.filter(Boolean).join(sep);
+    const psep = ' ' + DIM + PL + ' ' + R;
 
-    if (r5h > 0) parts.push(seg(bar(r5h, 8), cc(r5h)) + segDim('5h'));
-    if (r7d > 0) parts.push(seg(bar(r7d, 8), cc(r7d)) + segDim('7d'));
+    const left = grp([core, linesStr, tokStr + segDim('/') + speedStr]);
+    const right = grp([quotaStr, gitStr, sys.join(' ')]);
 
-    if (subagents.running.length > 0) parts.push(seg(`${subagents.running.length}\u25C6`, C.ed));
-    if (mcpFailed > 0) parts.push(seg(`\u2718${mcpFailed}`, C.err));
-    else if (mcpHealthy > 0) parts.push(seg(`\u2714${mcpHealthy}`, C.ok));
-    if (mcpAuth > 0) parts.push(seg(`\u25B3${mcpAuth}`, C.i));
-    if (compactCount > 0) parts.push(segDim(`c${compactCount}`));
-    if (editedFiles.length > 0) parts.push(seg(editedFiles[0].split('/').pop(), C.ed));
+    let output = left;
+    if (right) output += psep + right;
 
-    // ── Join with powerline separators ─────────────────────────────────
-    let output = parts.join(' ' + DIM + pl + ' ' + R);
-    if (POWERLINE_FONTS) output = DIM + pl + ' ' + R + output + ' ' + DIM + pl + R;
+    if (USE_POWERLINE) {
+      output = DIM + PLR + ' ' + R + output + ' ' + DIM + PL + R;
+    }
 
     process.stdout.write(output + '\n');
   } catch (e) {
