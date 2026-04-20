@@ -2,8 +2,6 @@
 
 A lightweight Claude Code statusline dashboard — shows session info, cost tracking, quota bars, subagent status, token speed, and more in your terminal.
 
-![Statusline preview](images/demo.png)
-
 ## Features
 
 - **Session info** — model name + effort level, cost (delta-tracked across compactions), duration
@@ -16,38 +14,49 @@ A lightweight Claude Code statusline dashboard — shows session info, cost trac
 - **Edited files** — recently modified files
 - **Token speed** — rolling average tokens/sec
 - **Account email** — shows logged-in account (from ~/.claude.json)
-- **Powerline mode** — beautiful separators (requires Powerline/Nerd fonts)
+- **Powerline mode** — beautiful separators (requires Nerd fonts)
 - **Themes** — default, nord, catppuccin, dracula
+
+## Configuration
+
+All settings are in `lib/config.js`. Override via:
+
+**Option 1: JSON config** — create `~/.claude/statusline-config.json`:
+```json
+{
+  "theme": "catppuccin",
+  "powerline": true,
+  "tokenSpeedWindow": 30,
+  "quotaBarLen": 6,
+  "showAccount": true,
+  "showCompact": true,
+  "showSubagent": true,
+  "showMcp": true,
+  "showEditedFiles": true,
+  "showDirty": true
+}
+```
+
+**Option 2: Env vars:**
+```bash
+export CC_STATUSLINE_THEME=dracula
+export CC_STATUSLINE_POWERLINE=false
+```
 
 ## Themes
 
-Change the `THEME` constant at the top of `statusline.js`:
-
-```javascript
-const THEME = 'catppuccin'; // 'default' | 'nord' | 'catppuccin' | 'dracula'
-```
-
-## Powerline Mode
-
-Set `POWERLINE_FONTS = true` for nice separators (requires a Powerline/Nerd font):
-
-```javascript
-const POWERLINE_FONTS = true;  // Set false for simple pipe separators
-```
+Available: `default`, `nord`, `catppuccin`, `dracula`
 
 ## Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/SammyLin/cc-statusline ~/.cc-statusline
-
-# Copy files
+git clone https://github.com/sammylin/cc-statusline ~/.cc-statusline
 cp ~/.cc-statusline/statusline.js ~/.claude/statusline.js
 cp ~/.cc-statusline/hooks/*.js ~/.claude/hooks/
 cp -R ~/.cc-statusline/lib ~/.claude/lib
 ```
 
-Then add to your `~/.claude/settings.json`:
+Then add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -76,14 +85,6 @@ Then add to your `~/.claude/settings.json`:
 | `compact-monitor.js` | PreCompact | Count compaction events |
 | `file-tracker.js` | PostToolUse (Write/Edit) | Record recently edited files |
 | `message-tracker.js` | UserPromptSubmit | Cache recent messages |
-
-## Color Scheme
-
-- **Green** — low usage, success states
-- **Yellow** — medium usage, warnings
-- **Red** — high usage, errors
-- **Cyan** — repo/directory info
-- **Dim** — secondary info
 
 ## License
 
