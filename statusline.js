@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { loadConfig } from './lib/config.js';
 import { getTheme, seg, segDim, segBold, POWERLINE, R, DIM, BOLD } from './lib/colors.js';
 import { bar, fmtDur, fmtTok } from './lib/format.js';
 import { getGitInfo } from './lib/git.js';
 import { getHookData } from './lib/hooks.js';
 import { getRateLimits } from './lib/rate-limits.js';
 import { updateSession } from './lib/session.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // ─── Config ────────────────────────────────────────────────────────────────
-const THEME = getTheme('catppuccin');
-const USE_POWERLINE = true;
-const PL  = USE_POWERLINE ? POWERLINE : '│';
-const PLR = USE_POWERLINE ? '\uE0B2' : '│';
+const cfg = loadConfig();
+const C = getTheme(cfg.theme);
+const PL  = cfg.powerline ? POWERLINE : '|';
+const PLR = cfg.powerline ? '\uE0B2' : '|';
 
 // ─── Read stdin ─────────────────────────────────────────────────────────────
 let d = '';
@@ -21,16 +22,17 @@ process.stdin.on('data', c => d += c);
 process.stdin.on('end', () => {
   try {
     const i = JSON.parse(d);
-    const C = THEME;
 
     // ── Account ─────────────────────────────────────────────────────────
     let account = '';
-    try {
-      const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-      if (claudeJson?.account?.email) {
-        account = claudeJson.account.email.replace(/@.*/, '');
-      }
-    } catch (_) {}
+    if (cfg.showAccount) {
+      try {
+        const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
+        if (claudeJson?.account?.email) {
+          account = claudeJson.account.email.replace(/@.*/, '');
+        }
+      } catch (_) {}
+    }
 
     // ── Session data ─────────────────────────────────────────────────────
     const model = (i.model?.display_name || '?').replace('Claude ', '');
@@ -74,27 +76,29 @@ process.stdin.on('end', () => {
     const quota = [];
     if (r5h > 0) {
       const col = r5h >= 80 ? C.hi : r5h >= 50 ? C.i : C.ok;
-      quota.push(seg(bar(r5h, 6), col) + segDim('5h'));
+      quota.push(seg(bar(r5h, cfg.quotaBarLen), col) + segDim('5h'));
     }
     if (r7d > 0) {
       const col = r7d >= 80 ? C.hi : r7d >= 50 ? C.i : C.ok;
-      quota.push(seg(bar(r7d, 6), col) + segDim('7d'));
+      quota.push(seg(bar(r7d, cfg.quotaBarLen), col) + segDim('7d'));
     }
     const quotaStr = quota.join(segDim(' '));
 
     // Group 5: Git repo + branch
-    const gitStr = git.repo
+    const gitStr = (cfg.showDirty && git.repo)
       ? seg(git.repo, C.b) + ' ' + seg(git.branch, git.dirty ? C.hi : C.b) + (git.dirty ? seg('!', C.hi) : '')
       : segDim('no git');
 
     // Group 6: System (MCP, compact, subagent, edited files)
     const sys = [];
-    if (hook.mcpFailed > 0) sys.push(seg(`\u2717${hook.mcpFailed}`, C.err));
-    else if (hook.mcpHealthy > 0) sys.push(seg(`\u2713${hook.mcpHealthy}`, C.ok));
-    if (hook.mcpAuth > 0) sys.push(seg(`\u25C7${hook.mcpAuth}`, C.i));
-    if (hook.compact > 0) sys.push(segDim(`\u2302${hook.compact}`));
-    if (hook.subagent > 0) sys.push(seg(`${hook.subagent}\u25C6`, C.ed));
-    if (hook.edited.length > 0) sys.push(seg(hook.edited[0].split('/').pop(), C.ed));
+    if (cfg.showMcp) {
+      if (hook.mcpFailed > 0) sys.push(seg(`\u2717${hook.mcpFailed}`, C.err));
+      else if (hook.mcpHealthy > 0) sys.push(seg(`\u2713${hook.mcpHealthy}`, C.ok));
+      if (hook.mcpAuth > 0) sys.push(seg(`\u25C7${hook.mcpAuth}`, C.i));
+    }
+    if (cfg.showCompact && hook.compact > 0) sys.push(segDim(`\u2302${hook.compact}`));
+    if (cfg.showSubagent && hook.subagent > 0) sys.push(seg(`${hook.subagent}\u25C6`, C.ed));
+    if (cfg.showEditedFiles && hook.edited.length > 0) sys.push(seg(hook.edited[0].split('/').pop(), C.ed));
 
     // ── Compose ─────────────────────────────────────────────────────────
     const grp = (parts, sep = ' ') => parts.filter(Boolean).join(sep);
@@ -106,7 +110,7 @@ process.stdin.on('end', () => {
     let output = left;
     if (right) output += psep + right;
 
-    if (USE_POWERLINE) {
+    if (cfg.powerline) {
       output = DIM + PLR + ' ' + R + output + ' ' + DIM + PL + R;
     }
 
