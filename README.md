@@ -75,15 +75,26 @@ claude plugin marketplace add SammyLin/cc-statusline
 claude plugin install cc-statusline@cc-statusline
 ```
 
-Then add the `statusLine` block from below to your `~/.claude/settings.json`.
+The plugin auto-registers all hooks (via `hooks/hooks.json`). You only need to add the `statusLine` block to your `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node ~/.claude/plugins/marketplaces/cc-statusline/statusline.js",
+    "refreshInterval": 30
+  }
+}
+```
 
 ### Option B — manual
 
 ```bash
 git clone https://github.com/SammyLin/cc-statusline ~/.cc-statusline
+mkdir -p ~/.claude/hooks ~/.claude/lib
 cp ~/.cc-statusline/statusline.js ~/.claude/statusline.js
 cp ~/.cc-statusline/hooks/*.js ~/.claude/hooks/
-cp -R ~/.cc-statusline/lib ~/.claude/lib
+cp -R ~/.cc-statusline/lib/. ~/.claude/lib/
 ```
 
 Then add to `~/.claude/settings.json`:
