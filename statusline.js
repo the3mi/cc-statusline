@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig } from './lib/config.js';
 import { getTheme, seg, segDim, segBold, POWERLINE, R, DIM } from './lib/colors.js';
-import { bar, fmtDur, fmtTok, shortDir } from './lib/format.js';
+import { bar, fmtDur, fmtTok, fmtReset, shortDir } from './lib/format.js';
 import { getGitInfo } from './lib/git.js';
 import { getHookData } from './lib/hooks.js';
 import { getRateLimits } from './lib/rate-limits.js';
@@ -9,6 +9,7 @@ import { updateSession } from './lib/session.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { spawn } from 'child_process';
 
 const cfg = loadConfig();
 const C = getTheme(cfg.theme);
@@ -41,7 +42,7 @@ process.stdin.on('end', () => {
     const dirStr = cfg.showDir ? shortDir(cwd, cfg.dirSegments) : '';
     const git = getGitInfo(i);
     const hook = getHookData();
-    const { r5h, r7d } = getRateLimits(i);
+    const { r5h, r7d, r5hReset, r7dReset } = getRateLimits(i);
 
     // ── Build segments ───────────────────────────────────────────────────
     const dirSeg = dirStr ? seg(dirStr, C.b) : '';
@@ -53,14 +54,17 @@ process.stdin.on('end', () => {
     const durSeg = dur > 0 ? segDim(fmtDur(dur)) : '';
 
     const quotaSegs = [];
-    if (r5h > 0) {
-      const col = r5h >= 80 ? C.hi : r5h >= 50 ? C.i : C.ok;
-      quotaSegs.push(seg(bar(r5h, cfg.quotaBarLen), col) + segDim(' 5h'));
-    }
-    if (r7d > 0) {
-      const col = r7d >= 80 ? C.hi : r7d >= 50 ? C.i : C.ok;
-      quotaSegs.push(seg(bar(r7d, cfg.quotaBarLen), col) + segDim(' 7d'));
-    }
+    const buildQuota = (pct, label, reset) => {
+      const col = pct >= 80 ? C.hi : pct >= 50 ? C.i : C.ok;
+      let s = seg(bar(pct, cfg.quotaBarLen), col) + segDim(` ${label} ${pct}%`);
+      if (cfg.showQuotaReset && reset) {
+        const r = fmtReset(reset, label);
+        if (r) s += segDim(` ${r}`);
+      }
+      return s;
+    };
+    if (r5h > 0) quotaSegs.push(buildQuota(r5h, '5h', r5hReset));
+    if (r7d > 0) quotaSegs.push(buildQuota(r7d, '7d', r7dReset));
 
     const tokTotal = cum.tok?.total || 0;
     const tokSeg = tokTotal > 0
@@ -117,6 +121,18 @@ process.stdin.on('end', () => {
     let out = open + line1;
     if (line2) out += '\n' + close + line2;
     process.stdout.write(out + '\n');
+
+    // Fire-and-forget MCP cache refresh so the next render has fresh data.
+    // The refresher self-skips when the cache is still fresh.
+    if (cfg.showMcp) {
+      try {
+        const refresher = path.join(os.homedir(), '.claude', 'hooks', 'mcp-status-refresh.js');
+        if (fs.existsSync(refresher)) {
+          const child = spawn('node', [refresher, cwd], { detached: true, stdio: 'ignore' });
+          child.unref();
+        }
+      } catch (_) {}
+    }
   } catch (e) {
     process.stdout.write('');
   }

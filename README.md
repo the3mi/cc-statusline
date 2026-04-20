@@ -9,7 +9,7 @@ A lightweight Claude Code statusline dashboard with a rounded multi-line layout 
 - **Rounded layout** — prompt-style ╭╴ / ╰╴ two-line output (toggle to single-line via config)
 - **Current directory** — auto-shortens long paths (`~/…/baz/deep`)
 - **Session info** — model name + effort level, cost (delta-tracked across compactions), duration
-- **Quota bars** — 5h and 7d rate limit usage with color-coded progress bars
+- **Quota bars** — 5h and 7d rate limit usage with %, reset countdown, and color-coded progress bars
 - **Repo/branch** — git owner/repo, branch name, dirty indicator
 - **Subagent tracker** — concurrent subagent runs
 - **MCP health** — server status monitoring (healthy/failed/needs_auth)
@@ -17,7 +17,7 @@ A lightweight Claude Code statusline dashboard with a rounded multi-line layout 
 - **Edited files** — recently modified files
 - **Token speed** — rolling average tokens/sec
 - **Account email** — shows logged-in account (from ~/.claude.json)
-- **Themes** — default, nord, catppuccin, dracula
+- **Themes** — default, nord, catppuccin (default, soft), dracula, pastel
 
 ## Configuration
 
@@ -31,6 +31,7 @@ All settings live in `lib/config.js`. Override via:
   "powerline": false,
   "tokenSpeedWindow": 30,
   "quotaBarLen": 6,
+  "showQuotaReset": true,
   "dirSegments": 2,
   "showDir": true,
   "showAccount": true,
@@ -51,7 +52,7 @@ export CC_STATUSLINE_POWERLINE=true   # only used by `single` layout
 
 ## Themes
 
-Available: `default`, `nord`, `catppuccin`, `dracula`
+Available: `default`, `nord`, `catppuccin` (default, softened), `dracula`, `pastel`
 
 ## Installation
 
@@ -102,6 +103,7 @@ Then add to `~/.claude/settings.json`:
 | `compact-monitor.js` | PreCompact | Count compaction events |
 | `file-tracker.js` | PostToolUse (Write/Edit) | Record recently edited files |
 | `message-tracker.js` | UserPromptSubmit | Cache recent messages |
+| `mcp-status-refresh.js` | _spawned in background by `statusline.js`_ | Refresh `mcp-status-cache.json` by running `claude mcp list` (self-throttles to 90s) |
 
 ## License
 
