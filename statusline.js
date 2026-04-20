@@ -83,7 +83,18 @@ process.stdin.on('end', () => {
       if (hook.mcpAuth > 0) sysSegs.push(seg(`\u25C7${hook.mcpAuth}`, C.i));
     }
     if (cfg.showCompact && hook.compact > 0) sysSegs.push(segDim(`\u2302${hook.compact}`));
-    if (cfg.showSubagent && hook.subagent > 0) sysSegs.push(seg(`${hook.subagent}\u25C6`, C.ed));
+    if (cfg.showSubagent && hook.subagents && hook.subagents.length > 0) {
+      const agents = hook.subagents;
+      if (agents.length === 1) {
+        const a = agents[0];
+        const label = a.desc ? `${a.type}: ${a.desc.slice(0, 30)}` : a.type;
+        sysSegs.push(seg(`\u25C6 ${label}`, C.ed));
+      } else {
+        const types = agents.map(a => a.type).slice(0, 3).join(',');
+        const more = agents.length > 3 ? `+${agents.length - 3}` : '';
+        sysSegs.push(seg(`\u25C6${agents.length} ${types}${more}`, C.ed));
+      }
+    }
     if (cfg.showEditedFiles && hook.edited.length > 0) sysSegs.push(seg(hook.edited[0].split('/').pop(), C.ed));
 
     const accountSeg = account ? segDim(account) : '';
