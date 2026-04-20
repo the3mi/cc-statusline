@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getPermissionMode } from '../lib/permission.js';
+import { getPermissionMode, parseModeFromArgv } from '../lib/permission.js';
 
 function tmpFile(contents) {
   const p = path.join(os.tmpdir(), `cc-statusline-perm-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
@@ -51,6 +51,22 @@ test('handles standalone permission-mode records', () => {
   const p = tmpFile(JSON.stringify({ type: 'permission-mode', permissionMode: 'bypassPermissions' }));
   assert.equal(getPermissionMode(p), 'bypassPermissions');
   fs.unlinkSync(p);
+});
+
+test('parseModeFromArgv — detects --dangerously-skip-permissions', () => {
+  assert.equal(parseModeFromArgv('/usr/bin/claude --dangerously-skip-permissions'), 'bypassPermissions');
+  assert.equal(parseModeFromArgv('claude --dangerously-skip-permissions --resume foo'), 'bypassPermissions');
+});
+
+test('parseModeFromArgv — detects --permission-mode <value>', () => {
+  assert.equal(parseModeFromArgv('claude --permission-mode auto'), 'auto');
+  assert.equal(parseModeFromArgv('claude --permission-mode plan -- foo'), 'plan');
+  assert.equal(parseModeFromArgv('claude --permission-mode=acceptEdits'), 'acceptEdits');
+});
+
+test('parseModeFromArgv — returns empty when no mode flag present', () => {
+  assert.equal(parseModeFromArgv('claude --resume foo'), '');
+  assert.equal(parseModeFromArgv(''), '');
 });
 
 test('reads only the tail for large files (cheap on long sessions)', () => {
